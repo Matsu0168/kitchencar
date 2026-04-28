@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>店舗管理</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script src="config.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
@@ -18,12 +19,12 @@ body{font-family:'Hiragino Kaku Gothic ProN','Noto Sans JP',sans-serif;backgroun
 .tab.active{background:#ff6b35;color:#fff}
 .admin-tab{display:none}
 .admin-tab.active{display:block}
-
+ 
 /* quick links */
 .quick-links{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap}
 .ql-btn{background:#fff;border:none;border-radius:8px;padding:8px 14px;font-size:12px;font-weight:700;cursor:pointer;box-shadow:0 1px 6px rgba(0,0,0,.08);color:#555;transition:all .15s;display:flex;align-items:center;gap:5px}
 .ql-btn:hover{background:#ff6b35;color:#fff}
-
+ 
 /* menu tab */
 .section-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
 .section-head h3{font-size:14px;font-weight:700;color:#555}
@@ -46,7 +47,7 @@ body{font-family:'Hiragino Kaku Gothic ProN','Noto Sans JP',sans-serif;backgroun
 .toggle-sw input:checked+.tog-sl{background:#ff6b35}
 .toggle-sw input:checked+.tog-sl:before{transform:translateX(16px)}
 .empty-state{text-align:center;padding:40px 20px;color:#bbb;font-size:13px}
-
+ 
 /* orders tab */
 .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px}
 .stat{background:#fff;border-radius:12px;padding:14px 16px;box-shadow:0 1px 6px rgba(0,0,0,.07);text-align:center}
@@ -71,7 +72,7 @@ body{font-family:'Hiragino Kaku Gothic ProN','Noto Sans JP',sans-serif;backgroun
 .btn-call:active{background:#d95a2a}
 .btn-call.done{background:#e8f5e9;color:#4caf50;pointer-events:none}
 .no-orders{text-align:center;padding:40px 20px;color:#bbb;font-size:13px}
-
+ 
 /* settings tab */
 .settings-card{background:#fff;border-radius:12px;padding:20px;box-shadow:0 1px 6px rgba(0,0,0,.07)}
 .settings-card h3{font-size:14px;font-weight:700;color:#333;margin-bottom:16px}
@@ -80,7 +81,7 @@ body{font-family:'Hiragino Kaku Gothic ProN','Noto Sans JP',sans-serif;backgroun
 .form-input{width:100%;border:1px solid #ddd;border-radius:8px;padding:10px 12px;font-size:14px;outline:none;transition:border .2s}
 .form-input:focus{border-color:#ff6b35}
 .btn-save{background:#ff6b35;color:#fff;border:none;border-radius:10px;padding:12px 24px;font-size:14px;font-weight:800;cursor:pointer;margin-top:6px}
-
+ 
 /* modal */
 .modal-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:100;align-items:center;justify-content:center;padding:20px}
 .modal-bg.open{display:flex}
@@ -92,10 +93,28 @@ body{font-family:'Hiragino Kaku Gothic ProN','Noto Sans JP',sans-serif;backgroun
 .modal-actions{display:flex;gap:10px;margin-top:18px}
 .btn-modal-save{flex:1;background:#ff6b35;color:#fff;border:none;border-radius:10px;padding:12px;font-size:14px;font-weight:800;cursor:pointer}
 .btn-modal-cancel{flex:1;background:#f0f0f0;color:#555;border:none;border-radius:10px;padding:12px;font-size:14px;font-weight:700;cursor:pointer}
-
+ 
 /* toast */
 .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#222;color:#fff;border-radius:10px;padding:10px 20px;font-size:13px;font-weight:600;opacity:0;transition:opacity .3s;pointer-events:none;z-index:200}
 .toast.show{opacity:1}
+ 
+/* QR modal */
+.qr-modal-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:200;align-items:center;justify-content:center;padding:20px}
+.qr-modal-bg.open{display:flex}
+.qr-modal{background:#fff;border-radius:20px;padding:32px 28px;width:100%;max-width:380px;text-align:center;box-shadow:0 8px 40px rgba(0,0,0,.2)}
+.qr-modal h3{font-size:17px;font-weight:800;color:#222;margin-bottom:4px}
+.qr-modal p{font-size:12px;color:#aaa;margin-bottom:20px}
+.qr-box{display:flex;justify-content:center;margin-bottom:20px}
+.qr-url{background:#f8f8f8;border-radius:8px;padding:10px 14px;font-size:11px;color:#666;word-break:break-all;margin-bottom:20px;text-align:left}
+.qr-actions{display:flex;gap:10px}
+.btn-print{flex:1;background:#ff6b35;color:#fff;border:none;border-radius:10px;padding:12px;font-size:14px;font-weight:800;cursor:pointer}
+.btn-qr-close{flex:1;background:#f0f0f0;color:#555;border:none;border-radius:10px;padding:12px;font-size:14px;font-weight:700;cursor:pointer}
+ 
+@media print {
+  body * { visibility: hidden; }
+  .qr-print-area, .qr-print-area * { visibility: visible; }
+  .qr-print-area { position: fixed; top: 50%; left: 50%; transform: translate(-50%,-50%); text-align: center; }
+}
 </style>
 </head>
 <body>
@@ -104,18 +123,19 @@ body{font-family:'Hiragino Kaku Gothic ProN','Noto Sans JP',sans-serif;backgroun
     <h2>⚙️ 店舗管理ダッシュボード</h2>
     <div class="store-badge">🏪 <span id="store-badge-name">読み込み中…</span></div>
   </div>
-
+ 
   <div class="quick-links">
     <button class="ql-btn" onclick="window.open('order.html','_blank')">🛒 注文画面を開く</button>
     <button class="ql-btn" onclick="window.open('display.html','_blank','width=1024,height=640')">📺 番号表示画面</button>
+    <button class="ql-btn" style="background:#ff6b35;color:#fff" onclick="showQR()">📱 QRコードを表示</button>
   </div>
-
+ 
   <div class="tab-bar">
     <button class="tab active" onclick="switchTab('menu',this)">📋 メニュー</button>
     <button class="tab" onclick="switchTab('orders',this)">📦 注文管理</button>
     <button class="tab" onclick="switchTab('settings',this)">🏪 設定</button>
   </div>
-
+ 
   <!-- MENU TAB -->
   <div class="admin-tab active" id="tab-menu">
     <div class="section-head">
@@ -129,7 +149,7 @@ body{font-family:'Hiragino Kaku Gothic ProN','Noto Sans JP',sans-serif;backgroun
       <div id="menu-admin-list"><div class="empty-state">読み込み中…</div></div>
     </div>
   </div>
-
+ 
   <!-- ORDERS TAB -->
   <div class="admin-tab" id="tab-orders">
     <div class="stats">
@@ -144,7 +164,7 @@ body{font-family:'Hiragino Kaku Gothic ProN','Noto Sans JP',sans-serif;backgroun
     <div class="order-list" id="order-list"></div>
     <div class="no-orders" id="no-orders" style="display:none">📭 まだ注文はありません</div>
   </div>
-
+ 
   <!-- SETTINGS TAB -->
   <div class="admin-tab" id="tab-settings">
     <div class="settings-card">
@@ -161,7 +181,7 @@ body{font-family:'Hiragino Kaku Gothic ProN','Noto Sans JP',sans-serif;backgroun
     </div>
   </div>
 </div>
-
+ 
 <!-- MODAL -->
 <div class="modal-bg" id="modal-bg" onclick="closeModalBg(event)">
 <div class="modal">
@@ -196,18 +216,38 @@ body{font-family:'Hiragino Kaku Gothic ProN','Noto Sans JP',sans-serif;backgroun
   </div>
 </div>
 </div>
-
+ 
 <div class="toast" id="toast"></div>
-
+ 
+<!-- QR MODAL -->
+<div class="qr-modal-bg" id="qr-modal-bg" onclick="closeQRBg(event)">
+  <div class="qr-modal">
+    <h3>📱 注文用QRコード</h3>
+    <p>このQRコードをキッチンカーに貼り付けてください</p>
+    <div class="qr-box">
+      <div id="qr-canvas"></div>
+    </div>
+    <div class="qr-print-area" style="display:none">
+      <div id="qr-canvas-print"></div>
+      <div style="margin-top:12px;font-size:16px;font-weight:800">こちらからご注文ください</div>
+    </div>
+    <div class="qr-url" id="qr-url-text"></div>
+    <div class="qr-actions">
+      <button class="btn-print" onclick="printQR()">🖨️ 印刷する</button>
+      <button class="btn-qr-close" onclick="closeQR()">閉じる</button>
+    </div>
+  </div>
+</div>
+ 
 <script>
 const { createClient } = supabase;
 const sb = createClient(SUPABASE_URL, SUPABASE_KEY);
-
+ 
 const EMOJIS = ['🍱','🌮','🌯','🍔','🍟','🌭','🍕','🍜','🍛','🍣','🥗','🥙','🥪','🧆','🍗','🥩','🥑','🧀','🫔','🥤','☕','🧃','🍺','🥛','🧋'];
 let STORE = null;
 let MENU  = [];
 let ORDERS = [];
-
+ 
 // ── INIT ──
 async function init(){
   const { data: stores } = await sb.from('stores').select('*').limit(1);
@@ -220,14 +260,14 @@ async function init(){
   await loadOrders();
   subscribeOrders();
 }
-
+ 
 // ── MENU ──
 async function loadMenu(){
   const { data } = await sb.from('menu_items').select('*').eq('store_id', STORE.id).order('sort_order');
   MENU = data || [];
   renderAdminMenu();
 }
-
+ 
 function renderAdminMenu(){
   document.getElementById('menu-count').textContent = MENU.length;
   const el = document.getElementById('menu-admin-list');
@@ -254,13 +294,13 @@ function renderAdminMenu(){
     el.appendChild(row);
   });
 }
-
+ 
 async function toggleItem(id, active){
   await sb.from('menu_items').update({ active }).eq('id', id);
   const m = MENU.find(x => x.id === id);
   if(m) m.active = active;
 }
-
+ 
 async function delItem(id){
   if(!confirm('この商品を削除しますか？')) return;
   await sb.from('menu_items').delete().eq('id', id);
@@ -268,7 +308,7 @@ async function delItem(id){
   renderAdminMenu();
   showToast('削除しました');
 }
-
+ 
 // ── MODAL ──
 const epEl = document.getElementById('emoji-picker');
 EMOJIS.forEach(e => {
@@ -281,7 +321,7 @@ EMOJIS.forEach(e => {
   };
   epEl.appendChild(b);
 });
-
+ 
 function openModal(id){
   document.getElementById('modal-title').textContent = id ? '商品を編集' : '商品を追加';
   document.getElementById('edit-id').value = id || '';
@@ -302,7 +342,7 @@ function openModal(id){
 }
 function closeModal(){ document.getElementById('modal-bg').classList.remove('open'); }
 function closeModalBg(e){ if(e.target === document.getElementById('modal-bg')) closeModal(); }
-
+ 
 async function saveItem(){
   const name  = document.getElementById('item-name').value.trim();
   const price = parseInt(document.getElementById('item-price').value);
@@ -325,7 +365,7 @@ async function saveItem(){
   await loadMenu();
   showToast(editId ? '更新しました' : '商品を追加しました');
 }
-
+ 
 // ── ORDERS ──
 async function loadOrders(){
   const today = new Date(); today.setHours(0,0,0,0);
@@ -338,7 +378,7 @@ async function loadOrders(){
   ORDERS = data || [];
   renderOrders();
 }
-
+ 
 function renderOrders(){
   const waiting = ORDERS.filter(o => o.status === 'waiting').length;
   const done    = ORDERS.filter(o => o.status === 'ready').length;
@@ -374,7 +414,7 @@ function renderOrders(){
     el.appendChild(card);
   });
 }
-
+ 
 async function callOrder(id, ticketNum){
   await sb.from('orders').update({ status: 'ready' }).eq('id', id);
   const o = ORDERS.find(x => x.id === id);
@@ -382,7 +422,7 @@ async function callOrder(id, ticketNum){
   renderOrders();
   showToast(`📢 ${ticketNum}番 を呼びました`);
 }
-
+ 
 async function clearOrders(){
   if(!confirm('今日の注文データをすべてリセットしますか？')) return;
   const today = new Date(); today.setHours(0,0,0,0);
@@ -390,7 +430,7 @@ async function clearOrders(){
   await loadOrders();
   showToast('リセットしました');
 }
-
+ 
 // ── REALTIME ──
 function subscribeOrders(){
   sb.channel('admin-orders')
@@ -407,7 +447,7 @@ function subscribeOrders(){
     })
     .subscribe();
 }
-
+ 
 // ── SETTINGS ──
 async function saveSettings(){
   const name  = document.getElementById('s-name').value.trim() || 'キッチンカー';
@@ -417,7 +457,7 @@ async function saveSettings(){
   document.getElementById('store-badge-name').textContent = name;
   showToast('保存しました');
 }
-
+ 
 // ── UI HELPERS ──
 function switchTab(t, btn){
   document.querySelectorAll('.admin-tab').forEach(x => x.classList.remove('active'));
@@ -426,14 +466,56 @@ function switchTab(t, btn){
   btn.classList.add('active');
   if(t === 'orders') loadOrders();
 }
-
+ 
 function showToast(msg){
   const el = document.getElementById('toast');
   el.textContent = msg;
   el.classList.add('show');
   setTimeout(() => el.classList.remove('show'), 2500);
 }
-
+ 
+// ── QR CODE ──
+function showQR(){
+  const orderUrl = window.location.origin + '/order.html';
+  document.getElementById('qr-url-text').textContent = orderUrl;
+ 
+  // QRコード生成
+  const qrBox = document.getElementById('qr-canvas');
+  qrBox.innerHTML = '';
+  new QRCode(qrBox, {
+    text: orderUrl,
+    width: 200,
+    height: 200,
+    colorDark: '#222222',
+    colorLight: '#ffffff',
+    correctLevel: QRCode.CorrectLevel.H
+  });
+ 
+  document.getElementById('qr-modal-bg').classList.add('open');
+}
+ 
+function closeQR(){ document.getElementById('qr-modal-bg').classList.remove('open'); }
+function closeQRBg(e){ if(e.target === document.getElementById('qr-modal-bg')) closeQR(); }
+ 
+function printQR(){
+  const orderUrl = window.location.origin + '/order.html';
+  const printBox = document.getElementById('qr-canvas-print');
+  printBox.innerHTML = '';
+  new QRCode(printBox, {
+    text: orderUrl,
+    width: 280,
+    height: 280,
+    colorDark: '#000000',
+    colorLight: '#ffffff',
+    correctLevel: QRCode.CorrectLevel.H
+  });
+  document.querySelector('.qr-print-area').style.display = 'block';
+  setTimeout(() => {
+    window.print();
+    document.querySelector('.qr-print-area').style.display = 'none';
+  }, 300);
+}
+ 
 init();
 </script>
 </body>
