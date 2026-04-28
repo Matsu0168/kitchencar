@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>店舗管理</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Hiragino Kaku Gothic ProN','Noto Sans JP',sans-serif;background:#f4f4f4;min-height:100vh}
+.wrap{max-width:900px;margin:0 auto;padding:20px 16px}
+.top-bar{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:10px}
+.top-bar h2{font-size:18px;font-weight:800;color:#222}
+.store-badge{font-size:12px;color:#aaa;background:#fff;border-radius:8px;padding:5px 10px}
+.tab-bar{display:flex;gap:4px;background:#fff;border-radius:10px;padding:4px;box-shadow:0 1px 6px rgba(0,0,0,.08);margin-bottom:20px}
+.tab{flex:1;padding:9px;border:none;background:none;border-radius:7px;font-size:13px;font-weight:700;color:#aaa;cursor:pointer;transition:all .2s;text-align:center}
+.tab.active{background:#ff6b35;color:#fff}
+.admin-tab{display:none}
+.admin-tab.active{display:block}
+
+/* quick links */
+.quick-links{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap}
+.ql-btn{background:#fff;border:none;border-radius:8px;padding:8px 14px;font-size:12px;font-weight:700;cursor:pointer;box-shadow:0 1px 6px rgba(0,0,0,.08);color:#555;transition:all .15s;display:flex;align-items:center;gap:5px}
+.ql-btn:hover{background:#ff6b35;color:#fff}
+
+/* menu tab */
+.section-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+.section-head h3{font-size:14px;font-weight:700;color:#555}
+.btn-add{background:#ff6b35;color:#fff;border:none;border-radius:8px;padding:7px 14px;font-size:12px;font-weight:700;cursor:pointer}
+.menu-table{width:100%;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 1px 6px rgba(0,0,0,.07)}
+.mt-head{display:grid;grid-template-columns:40px 1fr 80px 80px 64px 80px;background:#f8f8f8;padding:10px 14px;font-size:11px;font-weight:700;color:#aaa;gap:8px}
+.mt-row{display:grid;grid-template-columns:40px 1fr 80px 80px 64px 80px;padding:12px 14px;font-size:13px;color:#333;gap:8px;align-items:center;border-top:1px solid #f2f2f2}
+.mt-row:hover{background:#fffaf8}
+.mt-icon{font-size:24px;text-align:center}
+.mt-name{font-weight:600}
+.mt-cat{font-size:11px;color:#aaa;margin-top:1px}
+.mt-price{font-weight:700;color:#ff6b35}
+.mt-actions{display:flex;gap:4px}
+.btn-edit{background:#f0f0f0;border:none;border-radius:6px;padding:5px 8px;font-size:11px;font-weight:600;cursor:pointer;color:#555}
+.btn-del{background:#fff0f0;border:none;border-radius:6px;padding:5px 8px;font-size:11px;font-weight:600;cursor:pointer;color:#e04040}
+.toggle-sw{position:relative;width:36px;height:20px;cursor:pointer}
+.toggle-sw input{opacity:0;width:0;height:0}
+.tog-sl{position:absolute;top:0;left:0;right:0;bottom:0;background:#ccc;border-radius:20px;transition:.3s}
+.tog-sl:before{content:'';position:absolute;width:16px;height:16px;left:2px;top:2px;background:#fff;border-radius:50%;transition:.3s}
+.toggle-sw input:checked+.tog-sl{background:#ff6b35}
+.toggle-sw input:checked+.tog-sl:before{transform:translateX(16px)}
+.empty-state{text-align:center;padding:40px 20px;color:#bbb;font-size:13px}
+
+/* orders tab */
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px}
+.stat{background:#fff;border-radius:12px;padding:14px 16px;box-shadow:0 1px 6px rgba(0,0,0,.07);text-align:center}
+.stat-v{font-size:26px;font-weight:900;color:#ff6b35}
+.stat-l{font-size:11px;color:#aaa;font-weight:600;margin-top:2px}
+.new-badge{display:inline-block;background:#ff6b35;color:#fff;font-size:10px;font-weight:700;border-radius:4px;padding:1px 6px;margin-left:6px;animation:fadeIn .4s}
+@keyframes fadeIn{from{opacity:0;transform:scale(.8)}to{opacity:1;transform:scale(1)}}
+.order-list{display:flex;flex-direction:column;gap:10px}
+.order-card{background:#fff;border-radius:12px;padding:14px 16px;box-shadow:0 1px 6px rgba(0,0,0,.07);display:flex;align-items:flex-start;gap:14px;transition:box-shadow .2s}
+.order-card.new-order{box-shadow:0 0 0 2px #ff6b35, 0 4px 12px rgba(255,107,53,.2)}
+.order-num{font-size:32px;font-weight:900;color:#ff6b35;min-width:52px;text-align:center;line-height:1.2}
+.order-num-lbl{font-size:10px;color:#aaa;text-align:center;font-weight:600}
+.order-body{flex:1}
+.order-items-txt{font-size:13px;color:#333;line-height:1.6}
+.order-time{font-size:11px;color:#aaa;margin-top:4px}
+.order-total{font-size:14px;font-weight:700;color:#222;margin-top:3px}
+.order-ctrl{display:flex;flex-direction:column;gap:6px;flex-shrink:0;align-items:center}
+.status-badge{font-size:10px;font-weight:700;padding:3px 8px;border-radius:6px;white-space:nowrap}
+.status-badge.waiting{background:#fff3e0;color:#ff9800}
+.status-badge.ready{background:#e8f5e9;color:#4caf50}
+.btn-call{background:#ff6b35;color:#fff;border:none;border-radius:8px;padding:8px 12px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;transition:background .15s}
+.btn-call:active{background:#d95a2a}
+.btn-call.done{background:#e8f5e9;color:#4caf50;pointer-events:none}
+.no-orders{text-align:center;padding:40px 20px;color:#bbb;font-size:13px}
+
+/* settings tab */
+.settings-card{background:#fff;border-radius:12px;padding:20px;box-shadow:0 1px 6px rgba(0,0,0,.07)}
+.settings-card h3{font-size:14px;font-weight:700;color:#333;margin-bottom:16px}
+.form-group{margin-bottom:14px}
+.form-label{font-size:12px;font-weight:700;color:#666;margin-bottom:5px;display:block}
+.form-input{width:100%;border:1px solid #ddd;border-radius:8px;padding:10px 12px;font-size:14px;outline:none;transition:border .2s}
+.form-input:focus{border-color:#ff6b35}
+.btn-save{background:#ff6b35;color:#fff;border:none;border-radius:10px;padding:12px 24px;font-size:14px;font-weight:800;cursor:pointer;margin-top:6px}
+
+/* modal */
+.modal-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:100;align-items:center;justify-content:center;padding:20px}
+.modal-bg.open{display:flex}
+.modal{background:#fff;border-radius:16px;padding:24px;width:100%;max-width:420px;box-shadow:0 8px 40px rgba(0,0,0,.2);max-height:90vh;overflow-y:auto}
+.modal h3{font-size:16px;font-weight:800;margin-bottom:18px}
+.emoji-picker{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.ep-btn{font-size:22px;padding:4px;border:2px solid transparent;border-radius:6px;cursor:pointer;background:none}
+.ep-btn.sel{border-color:#ff6b35;background:#fff8f4}
+.modal-actions{display:flex;gap:10px;margin-top:18px}
+.btn-modal-save{flex:1;background:#ff6b35;color:#fff;border:none;border-radius:10px;padding:12px;font-size:14px;font-weight:800;cursor:pointer}
+.btn-modal-cancel{flex:1;background:#f0f0f0;color:#555;border:none;border-radius:10px;padding:12px;font-size:14px;font-weight:700;cursor:pointer}
+
+/* toast */
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#222;color:#fff;border-radius:10px;padding:10px 20px;font-size:13px;font-weight:600;opacity:0;transition:opacity .3s;pointer-events:none;z-index:200}
+.toast.show{opacity:1}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top-bar">
+    <h2>⚙️ 店舗管理ダッシュボード</h2>
+    <div class="store-badge">🏪 <span id="store-badge-name">読み込み中…</span></div>
+  </div>
+
+  <div class="quick-links">
+    <button class="ql-btn" onclick="window.open('order.html','_blank')">🛒 注文画面を開く</button>
+    <button class="ql-btn" onclick="window.open('display.html','_blank','width=1024,height=640')">📺 番号表示画面</button>
+  </div>
+
+  <div class="tab-bar">
+    <button class="tab active" onclick="switchTab('menu',this)">📋 メニュー</button>
+    <button class="tab" onclick="switchTab('orders',this)">📦 注文管理</button>
+    <button class="tab" onclick="switchTab('settings',this)">🏪 設定</button>
+  </div>
+
+  <!-- MENU TAB -->
+  <div class="admin-tab active" id="tab-menu">
+    <div class="section-head">
+      <h3>メニュー（<span id="menu-count">0</span>件）</h3>
+      <button class="btn-add" onclick="openModal()">＋ 商品を追加</button>
+    </div>
+    <div class="menu-table">
+      <div class="mt-head">
+        <div></div><div>商品名</div><div>カテゴリ</div><div>価格</div><div>販売中</div><div>操作</div>
+      </div>
+      <div id="menu-admin-list"><div class="empty-state">読み込み中…</div></div>
+    </div>
+  </div>
+
+  <!-- ORDERS TAB -->
+  <div class="admin-tab" id="tab-orders">
+    <div class="stats">
+      <div class="stat"><div class="stat-v" id="stat-w">0</div><div class="stat-l">⏳ 待機中</div></div>
+      <div class="stat"><div class="stat-v" id="stat-d">0</div><div class="stat-l">✅ 完了</div></div>
+      <div class="stat"><div class="stat-v" id="stat-s">¥0</div><div class="stat-l">💰 本日売上</div></div>
+    </div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <h3 style="font-size:14px;font-weight:700;color:#555">注文一覧</h3>
+      <button style="background:#fff0f0;border:none;border-radius:8px;padding:6px 12px;font-size:11px;font-weight:700;color:#e04040;cursor:pointer" onclick="clearOrders()">🗑 今日の注文をリセット</button>
+    </div>
+    <div class="order-list" id="order-list"></div>
+    <div class="no-orders" id="no-orders" style="display:none">📭 まだ注文はありません</div>
+  </div>
+
+  <!-- SETTINGS TAB -->
+  <div class="admin-tab" id="tab-settings">
+    <div class="settings-card">
+      <h3>店舗情報</h3>
+      <div class="form-group">
+        <label class="form-label">店名・屋号</label>
+        <input class="form-input" type="text" id="s-name" placeholder="例：タコスde笑顔"/>
+      </div>
+      <div class="form-group">
+        <label class="form-label">キャッチコピー</label>
+        <input class="form-input" type="text" id="s-catch" placeholder="例：本場の味をあなたへ"/>
+      </div>
+      <button class="btn-save" onclick="saveSettings()">保存する</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL -->
+<div class="modal-bg" id="modal-bg" onclick="closeModalBg(event)">
+<div class="modal">
+  <h3 id="modal-title">商品を追加</h3>
+  <input type="hidden" id="edit-id"/>
+  <div class="form-group">
+    <label class="form-label">アイコン絵文字</label>
+    <div class="emoji-picker" id="emoji-picker"></div>
+    <input class="form-input" type="text" id="item-icon" placeholder="絵文字を入力" style="margin-top:8px"/>
+  </div>
+  <div class="form-group">
+    <label class="form-label">商品名 *</label>
+    <input class="form-input" type="text" id="item-name" placeholder="例：チキンタコス"/>
+  </div>
+  <div class="form-group">
+    <label class="form-label">説明文（任意）</label>
+    <input class="form-input" type="text" id="item-desc" placeholder="例：スパイシー鶏もも・アボカド入り"/>
+  </div>
+  <div style="display:flex;gap:10px">
+    <div class="form-group" style="flex:1">
+      <label class="form-label">カテゴリ</label>
+      <input class="form-input" type="text" id="item-cat" placeholder="フード"/>
+    </div>
+    <div class="form-group" style="flex:1">
+      <label class="form-label">価格（円）*</label>
+      <input class="form-input" type="number" id="item-price" placeholder="800"/>
+    </div>
+  </div>
+  <div class="modal-actions">
+    <button class="btn-modal-cancel" onclick="closeModal()">キャンセル</button>
+    <button class="btn-modal-save" onclick="saveItem()">保存する</button>
+  </div>
+</div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const { createClient } = supabase;
+const sb = createClient(SUPABASE_URL, SUPABASE_KEY);
+
+const EMOJIS = ['🍱','🌮','🌯','🍔','🍟','🌭','🍕','🍜','🍛','🍣','🥗','🥙','🥪','🧆','🍗','🥩','🥑','🧀','🫔','🥤','☕','🧃','🍺','🥛','🧋'];
+let STORE = null;
+let MENU  = [];
+let ORDERS = [];
+
+// ── INIT ──
+async function init(){
+  const { data: stores } = await sb.from('stores').select('*').limit(1);
+  if(!stores?.length){ showToast('⚠️ 店舗情報が見つかりません。schema.sqlを実行してください。'); return; }
+  STORE = stores[0];
+  document.getElementById('store-badge-name').textContent = STORE.name;
+  document.getElementById('s-name').value = STORE.name;
+  document.getElementById('s-catch').value = STORE.catch_phrase || '';
+  await loadMenu();
+  await loadOrders();
+  subscribeOrders();
+}
+
+// ── MENU ──
+async function loadMenu(){
+  const { data } = await sb.from('menu_items').select('*').eq('store_id', STORE.id).order('sort_order');
+  MENU = data || [];
+  renderAdminMenu();
+}
+
+function renderAdminMenu(){
+  document.getElementById('menu-count').textContent = MENU.length;
+  const el = document.getElementById('menu-admin-list');
+  el.innerHTML = '';
+  if(!MENU.length){ el.innerHTML = '<div class="empty-state">商品がありません。「＋ 商品を追加」から追加してください</div>'; return; }
+  MENU.forEach(item => {
+    const row = document.createElement('div');
+    row.className = 'mt-row';
+    row.innerHTML = `
+      <div class="mt-icon">${item.icon||'🍴'}</div>
+      <div><div class="mt-name">${item.name}</div><div class="mt-cat">${item.description||''}</div></div>
+      <div style="font-size:12px;color:#aaa">${item.category}</div>
+      <div class="mt-price">¥${item.price.toLocaleString()}</div>
+      <div>
+        <label class="toggle-sw">
+          <input type="checkbox" ${item.active?'checked':''} onchange="toggleItem('${item.id}',this.checked)"/>
+          <span class="tog-sl"></span>
+        </label>
+      </div>
+      <div class="mt-actions">
+        <button class="btn-edit" onclick="openModal('${item.id}')">編集</button>
+        <button class="btn-del"  onclick="delItem('${item.id}')">削除</button>
+      </div>`;
+    el.appendChild(row);
+  });
+}
+
+async function toggleItem(id, active){
+  await sb.from('menu_items').update({ active }).eq('id', id);
+  const m = MENU.find(x => x.id === id);
+  if(m) m.active = active;
+}
+
+async function delItem(id){
+  if(!confirm('この商品を削除しますか？')) return;
+  await sb.from('menu_items').delete().eq('id', id);
+  MENU = MENU.filter(x => x.id !== id);
+  renderAdminMenu();
+  showToast('削除しました');
+}
+
+// ── MODAL ──
+const epEl = document.getElementById('emoji-picker');
+EMOJIS.forEach(e => {
+  const b = document.createElement('button');
+  b.className = 'ep-btn'; b.textContent = e;
+  b.onclick = () => {
+    document.getElementById('item-icon').value = e;
+    document.querySelectorAll('.ep-btn').forEach(x => x.classList.remove('sel'));
+    b.classList.add('sel');
+  };
+  epEl.appendChild(b);
+});
+
+function openModal(id){
+  document.getElementById('modal-title').textContent = id ? '商品を編集' : '商品を追加';
+  document.getElementById('edit-id').value = id || '';
+  document.querySelectorAll('.ep-btn').forEach(x => x.classList.remove('sel'));
+  if(id){
+    const m = MENU.find(x => x.id === id);
+    document.getElementById('item-icon').value  = m.icon || '';
+    document.getElementById('item-name').value  = m.name;
+    document.getElementById('item-desc').value  = m.description || '';
+    document.getElementById('item-cat').value   = m.category || '';
+    document.getElementById('item-price').value = m.price;
+    const btn = [...document.querySelectorAll('.ep-btn')].find(b => b.textContent === m.icon);
+    if(btn) btn.classList.add('sel');
+  } else {
+    ['item-icon','item-name','item-desc','item-cat','item-price'].forEach(id => document.getElementById(id).value = '');
+  }
+  document.getElementById('modal-bg').classList.add('open');
+}
+function closeModal(){ document.getElementById('modal-bg').classList.remove('open'); }
+function closeModalBg(e){ if(e.target === document.getElementById('modal-bg')) closeModal(); }
+
+async function saveItem(){
+  const name  = document.getElementById('item-name').value.trim();
+  const price = parseInt(document.getElementById('item-price').value);
+  if(!name)         { alert('商品名を入力してください'); return; }
+  if(!price || price < 0) { alert('価格を正しく入力してください'); return; }
+  const payload = {
+    icon: document.getElementById('item-icon').value || '🍴',
+    name,
+    description: document.getElementById('item-desc').value.trim(),
+    category: document.getElementById('item-cat').value.trim() || 'その他',
+    price,
+  };
+  const editId = document.getElementById('edit-id').value;
+  if(editId){
+    await sb.from('menu_items').update(payload).eq('id', editId);
+  } else {
+    await sb.from('menu_items').insert({ ...payload, store_id: STORE.id, active: true, sort_order: MENU.length });
+  }
+  closeModal();
+  await loadMenu();
+  showToast(editId ? '更新しました' : '商品を追加しました');
+}
+
+// ── ORDERS ──
+async function loadOrders(){
+  const today = new Date(); today.setHours(0,0,0,0);
+  const { data } = await sb
+    .from('orders')
+    .select('*, order_items(*)')
+    .eq('store_id', STORE.id)
+    .gte('created_at', today.toISOString())
+    .order('created_at', { ascending: false });
+  ORDERS = data || [];
+  renderOrders();
+}
+
+function renderOrders(){
+  const waiting = ORDERS.filter(o => o.status === 'waiting').length;
+  const done    = ORDERS.filter(o => o.status === 'ready').length;
+  const sales   = ORDERS.reduce((s, o) => s + o.total, 0);
+  document.getElementById('stat-w').textContent = waiting;
+  document.getElementById('stat-d').textContent = done;
+  document.getElementById('stat-s').textContent = '¥' + sales.toLocaleString();
+  const el = document.getElementById('order-list');
+  el.innerHTML = '';
+  if(!ORDERS.length){ document.getElementById('no-orders').style.display='block'; return; }
+  document.getElementById('no-orders').style.display = 'none';
+  ORDERS.forEach(o => {
+    const card = document.createElement('div');
+    card.className = 'order-card';
+    card.id = 'order-' + o.id;
+    const itemsTxt = (o.order_items || []).map(i => `${i.item_icon}${i.item_name}×${i.quantity}`).join('、');
+    const isReady  = o.status === 'ready';
+    const t = new Date(o.created_at).toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'});
+    card.innerHTML = `
+      <div>
+        <div class="order-num">${o.ticket_number}</div>
+        <div class="order-num-lbl">番</div>
+      </div>
+      <div class="order-body">
+        <div class="order-items-txt">${itemsTxt || '（明細なし）'}</div>
+        <div class="order-time">${t}</div>
+        <div class="order-total">¥${o.total.toLocaleString()}</div>
+      </div>
+      <div class="order-ctrl">
+        <span class="status-badge ${isReady?'ready':'waiting'}">${isReady?'✅ 完了':'⏳ 待機'}</span>
+        <button class="btn-call ${isReady?'done':''}" onclick="callOrder('${o.id}',${o.ticket_number})">${isReady?'呼出済':'📢 番号を呼ぶ'}</button>
+      </div>`;
+    el.appendChild(card);
+  });
+}
+
+async function callOrder(id, ticketNum){
+  await sb.from('orders').update({ status: 'ready' }).eq('id', id);
+  const o = ORDERS.find(x => x.id === id);
+  if(o) o.status = 'ready';
+  renderOrders();
+  showToast(`📢 ${ticketNum}番 を呼びました`);
+}
+
+async function clearOrders(){
+  if(!confirm('今日の注文データをすべてリセットしますか？')) return;
+  const today = new Date(); today.setHours(0,0,0,0);
+  await sb.from('orders').delete().eq('store_id', STORE.id).gte('created_at', today.toISOString());
+  await loadOrders();
+  showToast('リセットしました');
+}
+
+// ── REALTIME ──
+function subscribeOrders(){
+  sb.channel('admin-orders')
+    .on('postgres_changes',{ event:'INSERT', schema:'public', table:'orders', filter:`store_id=eq.${STORE.id}` }, async payload => {
+      // 明細も取得してから追加
+      const { data } = await sb.from('order_items').select('*').eq('order_id', payload.new.id);
+      const order = { ...payload.new, order_items: data || [] };
+      ORDERS.unshift(order);
+      renderOrders();
+      // 新着ハイライト
+      const card = document.getElementById('order-' + order.id);
+      if(card){ card.classList.add('new-order'); setTimeout(()=>card.classList.remove('new-order'), 3000); }
+      showToast(`🔔 新しい注文が入りました（${order.ticket_number}番）`);
+    })
+    .subscribe();
+}
+
+// ── SETTINGS ──
+async function saveSettings(){
+  const name  = document.getElementById('s-name').value.trim() || 'キッチンカー';
+  const catch_phrase = document.getElementById('s-catch').value.trim();
+  await sb.from('stores').update({ name, catch_phrase }).eq('id', STORE.id);
+  STORE.name = name;
+  document.getElementById('store-badge-name').textContent = name;
+  showToast('保存しました');
+}
+
+// ── UI HELPERS ──
+function switchTab(t, btn){
+  document.querySelectorAll('.admin-tab').forEach(x => x.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
+  document.getElementById('tab-' + t).classList.add('active');
+  btn.classList.add('active');
+  if(t === 'orders') loadOrders();
+}
+
+function showToast(msg){
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 2500);
+}
+
+init();
+</script>
+</body>
+</html>

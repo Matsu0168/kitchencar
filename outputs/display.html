@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>番号表示</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;background:#111;color:#fff;font-family:'Hiragino Kaku Gothic ProN','Noto Sans JP',sans-serif;overflow:hidden}
+.wrap{height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px}
+.store-name{font-size:clamp(16px,2.5vw,28px);font-weight:700;color:#888;letter-spacing:2px;margin-bottom:clamp(20px,4vh,48px)}
+.main-card{background:#1a1a1a;border:3px solid #ff6b35;border-radius:clamp(20px,3vw,36px);padding:clamp(30px,5vw,64px) clamp(50px,8vw,120px);text-align:center;box-shadow:0 0 60px rgba(255,107,53,.25);margin-bottom:clamp(24px,4vh,48px);min-width:clamp(260px,50vw,600px);animation:pulse 3s ease-in-out infinite}
+@keyframes pulse{0%,100%{box-shadow:0 0 60px rgba(255,107,53,.25)}50%{box-shadow:0 0 90px rgba(255,107,53,.45)}}
+.calling-label{font-size:clamp(14px,2vw,22px);color:#aaa;font-weight:600;letter-spacing:3px;margin-bottom:clamp(8px,1.5vh,16px)}
+.current-number{font-size:clamp(100px,20vw,240px);font-weight:900;color:#ff6b35;line-height:1;letter-spacing:-4px;transition:all .4s}
+.current-number.pop{animation:pop .5s cubic-bezier(.175,.885,.32,1.275)}
+@keyframes pop{0%{transform:scale(.8);opacity:.4}60%{transform:scale(1.08)}100%{transform:scale(1);opacity:1}}
+.number-suffix{font-size:clamp(24px,4vw,52px);color:#ff6b35;font-weight:900;opacity:.7;margin-top:-8px}
+.waiting-state{display:none;flex-direction:column;align-items:center;gap:16px}
+.waiting-state.show{display:flex}
+.wait-icon{font-size:clamp(48px,8vw,96px)}
+.wait-text{font-size:clamp(18px,3vw,36px);font-weight:700;color:#444}
+.recent-section{display:flex;flex-direction:column;align-items:center;gap:12px}
+.recent-label{font-size:clamp(11px,1.5vw,16px);color:#555;font-weight:600;letter-spacing:2px}
+.recent-nums{display:flex;gap:clamp(10px,2vw,20px);flex-wrap:wrap;justify-content:center}
+.recent-chip{background:#222;border:1px solid #333;border-radius:10px;padding:clamp(6px,1vw,10px) clamp(14px,2vw,24px);font-size:clamp(18px,3vw,36px);font-weight:800;color:#555}
+.live-dot{position:fixed;top:16px;right:20px;display:flex;align-items:center;gap:6px;font-size:11px;color:#444}
+.dot{width:8px;height:8px;background:#4caf50;border-radius:50%;animation:blink 2s ease-in-out infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+.footer{position:fixed;bottom:20px;right:24px;font-size:11px;color:#333;font-weight:600;letter-spacing:1px}
+</style>
+</head>
+<body>
+<div class="live-dot"><div class="dot"></div> LIVE</div>
+<div class="wrap" id="wrap">
+
+  <!-- 番号表示中 -->
+  <div id="state-calling" style="display:none;flex-direction:column;align-items:center;width:100%">
+    <div class="store-name" id="disp-store-name">キッチンカー</div>
+    <div class="main-card">
+      <div class="calling-label">📢 ただいまお呼びしています</div>
+      <div class="current-number" id="current-num">--</div>
+      <div class="number-suffix">番</div>
+    </div>
+    <div class="recent-section" id="recent-section" style="display:none">
+      <div class="recent-label">直近の番号</div>
+      <div class="recent-nums" id="recent-nums"></div>
+    </div>
+  </div>
+
+  <!-- 待機中 -->
+  <div class="waiting-state show" id="state-waiting">
+    <div class="wait-icon">🍴</div>
+    <div class="wait-text">しばらくお待ちください</div>
+    <div style="font-size:clamp(12px,1.8vw,18px);color:#444;margin-top:4px">番号が呼ばれたら表示されます</div>
+  </div>
+</div>
+<div class="footer">KITCHEN CAR ORDER SYSTEM</div>
+
+<script>
+const { createClient } = supabase;
+const sb = createClient(SUPABASE_URL, SUPABASE_KEY);
+
+let storeId    = null;
+let currentNum = null;
+let recentNums = [];
+
+async function init(){
+  const { data: stores } = await sb.from('stores').select('*').limit(1);
+  if(!stores?.length) return;
+  storeId = stores[0].id;
+  document.getElementById('disp-store-name').textContent = stores[0].name;
+
+  // 最新の呼び出し済み番号を取得
+  const today = new Date(); today.setHours(0,0,0,0);
+  const { data: readyOrders } = await sb
+    .from('orders')
+    .select('ticket_number')
+    .eq('store_id', storeId)
+    .eq('status', 'ready')
+    .gte('created_at', today.toISOString())
+    .order('created_at', { ascending: false })
+    .limit(6);
+
+  if(readyOrders?.length){
+    recentNums = readyOrders.map(o => o.ticket_number);
+    currentNum = recentNums[0];
+    showNumber(currentNum);
+    renderRecent();
+  }
+
+  // リアルタイム購読（注文がreadyになったら表示）
+  sb.channel('display-orders')
+    .on('postgres_changes', {
+      event: 'UPDATE',
+      schema: 'public',
+      table: 'orders',
+      filter: `store_id=eq.${storeId}`
+    }, payload => {
+      if(payload.new.status === 'ready'){
+        const num = payload.new.ticket_number;
+        currentNum = num;
+        recentNums = [num, ...recentNums.filter(n => n !== num)].slice(0, 6);
+        showNumber(num);
+        renderRecent();
+      }
+    })
+    .subscribe();
+}
+
+function showNumber(num){
+  document.getElementById('state-waiting').classList.remove('show');
+  const callingEl = document.getElementById('state-calling');
+  callingEl.style.display = 'flex';
+  const numEl = document.getElementById('current-num');
+  numEl.textContent = num;
+  numEl.classList.remove('pop');
+  void numEl.offsetWidth;
+  numEl.classList.add('pop');
+  document.body.style.background = '#1a0d00';
+  setTimeout(() => { document.body.style.background = '#111'; }, 400);
+}
+
+function renderRecent(){
+  const filtered = recentNums.filter(n => n !== currentNum).slice(0, 4);
+  const section  = document.getElementById('recent-section');
+  if(!filtered.length){ section.style.display = 'none'; return; }
+  section.style.display = 'flex';
+  const el = document.getElementById('recent-nums');
+  el.innerHTML = '';
+  filtered.forEach(n => {
+    const chip = document.createElement('div');
+    chip.className = 'recent-chip';
+    chip.textContent = n + '番';
+    el.appendChild(chip);
+  });
+}
+
+init();
+</script>
+</body>
+</html>

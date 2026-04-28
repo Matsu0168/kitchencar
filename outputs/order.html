@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
+<title>ご注文</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Hiragino Kaku Gothic ProN','Noto Sans JP',sans-serif;background:#f5f0eb;display:flex;justify-content:center;min-height:100vh}
+.app{width:100%;max-width:430px;min-height:100vh;background:#fff;display:flex;flex-direction:column}
+.header{background:#ff6b35;color:#fff;padding:16px 20px 12px;text-align:center}
+.header h1{font-size:20px;font-weight:800}
+.header p{font-size:11px;opacity:.85;margin-top:2px}
+.screen{display:none;flex-direction:column;flex:1}
+.screen.active{display:flex}
+
+/* menu */
+.menu-scroll{flex:1;overflow-y:auto;padding:12px}
+.cat-label{font-size:11px;font-weight:700;color:#aaa;letter-spacing:1px;text-transform:uppercase;padding:8px 4px 4px}
+.item-card{background:#fff;border-radius:12px;box-shadow:0 1px 8px rgba(0,0,0,.07);padding:12px 14px;display:flex;align-items:center;gap:12px;margin-bottom:10px}
+.item-card.soldout{opacity:.4;pointer-events:none}
+.item-icon{font-size:36px;width:46px;text-align:center;flex-shrink:0}
+.item-info{flex:1}
+.item-name{font-size:14px;font-weight:700;color:#222}
+.item-desc{font-size:11px;color:#999;margin-top:2px;line-height:1.4}
+.item-price{font-size:15px;font-weight:800;color:#ff6b35;margin-top:3px}
+.soldout-badge{font-size:10px;background:#eee;color:#aaa;border-radius:4px;padding:1px 6px;margin-left:6px}
+.qty-ctrl{display:flex;align-items:center;gap:6px;flex-shrink:0}
+.qb{width:28px;height:28px;border-radius:50%;border:2px solid #ff6b35;background:#fff;color:#ff6b35;font-size:16px;font-weight:800;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .15s;line-height:1}
+.qb.plus{background:#ff6b35;color:#fff}
+.qb:active{transform:scale(.9)}
+.qn{font-size:15px;font-weight:800;min-width:16px;text-align:center}
+.cart-bar{background:#ff6b35;color:#fff;padding:13px 18px;display:flex;align-items:center;justify-content:space-between;cursor:pointer;box-shadow:0 -2px 8px rgba(0,0,0,.12);transition:background .15s}
+.cart-bar:active{background:#d95a2a}
+.cart-bar.hidden{display:none}
+.cart-bar-l{display:flex;align-items:center;gap:8px}
+.cart-badge{background:#fff;color:#ff6b35;border-radius:50%;width:22px;height:22px;font-size:12px;font-weight:800;display:flex;align-items:center;justify-content:center}
+.cart-lbl{font-size:14px;font-weight:700}
+.cart-sum{font-size:16px;font-weight:800}
+
+/* confirm */
+.pad{padding:16px;flex:1;overflow-y:auto}
+.block-title{font-size:15px;font-weight:800;color:#222;margin-bottom:14px}
+.ci{display:flex;justify-content:space-between;align-items:center;padding:11px 0;border-bottom:1px solid #f2f2f2}
+.ci-l{font-size:14px;color:#333}
+.ci-sub{font-size:11px;color:#aaa;margin-top:1px}
+.ci-r{font-size:14px;font-weight:700}
+.total-r{display:flex;justify-content:space-between;padding:14px 0 6px}
+.total-lbl{font-size:14px;color:#555}
+.total-val{font-size:22px;font-weight:900;color:#ff6b35}
+.notice-box{background:#fff8f4;border:1px solid #ffd5bc;border-radius:10px;padding:12px;font-size:12px;color:#888;margin:10px 0 16px;line-height:1.6}
+.notice-box b{color:#ff6b35}
+.btn-main{width:100%;background:#ff6b35;color:#fff;border:none;border-radius:12px;padding:15px;font-size:15px;font-weight:800;cursor:pointer;transition:all .15s}
+.btn-main:active{background:#d95a2a;transform:scale(.98)}
+.btn-main:disabled{background:#ddd;cursor:not-allowed}
+.btn-sub{background:none;border:none;color:#ff6b35;font-size:13px;font-weight:600;cursor:pointer;padding:12px 0;width:100%;text-align:center}
+
+/* payment */
+.pay-amt-box{background:#fff8f4;border:2px solid #ffd5bc;border-radius:12px;padding:14px;text-align:center;margin-bottom:14px}
+.pay-amt-l{font-size:12px;color:#aaa}
+.pay-amt-v{font-size:30px;font-weight:900;color:#ff6b35;margin-top:3px}
+.mock-card{background:#f8f8f8;border:1px solid #e8e8e8;border-radius:12px;padding:14px;margin-bottom:14px}
+.mock-card-l{font-size:11px;color:#aaa;font-weight:700;margin-bottom:8px}
+.finput{width:100%;border:1px solid #ddd;border-radius:8px;padding:11px;font-size:14px;background:#fff;color:#333;margin-bottom:8px;outline:none}
+.finput:focus{border-color:#ff6b35}
+.frow{display:flex;gap:8px}
+.frow .finput{flex:1}
+.stripe-note{display:flex;align-items:center;justify-content:center;gap:5px;color:#bbb;font-size:11px;margin-top:8px}
+.stripe-note b{color:#635bff}
+
+/* processing */
+.proc{display:none;flex-direction:column;align-items:center;justify-content:center;flex:1;gap:12px}
+.proc.active{display:flex}
+.spin{width:44px;height:44px;border:5px solid #ffd5bc;border-top-color:#ff6b35;border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.proc-txt{color:#888;font-size:13px}
+
+/* ticket */
+.ticket-wrap{display:flex;flex-direction:column;align-items:center;padding:28px 20px;flex:1}
+.tick-icon{font-size:56px;margin-bottom:8px}
+.tick-title{font-size:17px;font-weight:800;color:#222;margin-bottom:4px}
+.tick-sub{font-size:12px;color:#888;text-align:center;line-height:1.6;margin-bottom:22px}
+.tick-num-box{background:#fff;border:3px solid #ff6b35;border-radius:18px;padding:22px 44px;text-align:center;box-shadow:0 4px 18px rgba(255,107,53,.15);margin-bottom:22px}
+.tick-num-l{font-size:12px;color:#aaa;font-weight:700;letter-spacing:1px}
+.tick-num-v{font-size:68px;font-weight:900;color:#ff6b35;line-height:1.1}
+.tick-items{width:100%;background:#f8f8f8;border-radius:12px;padding:12px 14px;margin-bottom:18px}
+.tick-item{display:flex;justify-content:space-between;font-size:13px;color:#555;padding:4px 0}
+.tick-note{background:#fff8f4;border:1px solid #ffd5bc;border-radius:10px;padding:13px;font-size:12px;color:#888;text-align:center;line-height:1.7;width:100%}
+.tick-note b{color:#ff6b35;font-size:14px}
+
+/* loading */
+.loading{display:flex;align-items:center;justify-content:center;flex:1;color:#aaa;font-size:14px;gap:10px}
+.err-box{margin:20px;padding:16px;background:#fff0f0;border-radius:10px;font-size:13px;color:#c00;text-align:center;line-height:1.6}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <div class="header">
+    <h1 id="store-name">🍴 キッチンカー</h1>
+    <p id="store-catch">QRコードでご注文・お支払い</p>
+  </div>
+
+  <!-- ① MENU -->
+  <div class="screen active" id="sc-menu">
+    <div class="menu-scroll" id="menu-list">
+      <div class="loading"><div class="spin"></div> メニューを読み込み中…</div>
+    </div>
+    <div class="cart-bar hidden" id="cart-bar" onclick="goConfirm()">
+      <div class="cart-bar-l">
+        <div class="cart-badge" id="cart-count">0</div>
+        <div class="cart-lbl">注文を確認する</div>
+      </div>
+      <div class="cart-sum" id="cart-total-bar">¥0</div>
+    </div>
+  </div>
+
+  <!-- ② CONFIRM -->
+  <div class="screen" id="sc-confirm">
+    <div class="pad">
+      <div class="block-title">🛒 ご注文内容の確認</div>
+      <div id="confirm-list"></div>
+      <div class="total-r">
+        <span class="total-lbl">合計（税込）</span>
+        <span class="total-val" id="confirm-total">¥0</span>
+      </div>
+      <div class="notice-box">
+        <b>💳 キャッシュレス決済のみ</b>です。<br>
+        お支払い後、番号券が発行されます。<br>
+        番号が呼ばれたらカウンターでお受け取りください。
+      </div>
+      <button class="btn-main" onclick="goPayment()">💳 お支払いへ進む</button>
+      <button class="btn-sub" onclick="showScreen('sc-menu')">← メニューに戻る</button>
+    </div>
+  </div>
+
+  <!-- ③ PAYMENT -->
+  <div class="screen" id="sc-payment">
+    <div class="pad">
+      <div class="block-title">💳 お支払い</div>
+      <div class="pay-amt-box">
+        <div class="pay-amt-l">お支払い金額</div>
+        <div class="pay-amt-v" id="pay-amount">¥0</div>
+      </div>
+      <div class="mock-card">
+        <div class="mock-card-l">カード情報を入力（デモ）</div>
+        <input class="finput" type="text" placeholder="カード番号　1234 5678 9012 3456"/>
+        <div class="frow">
+          <input class="finput" type="text" placeholder="MM/YY"/>
+          <input class="finput" type="text" placeholder="CVV"/>
+        </div>
+        <input class="finput" type="text" placeholder="カード名義（TARO YAMADA）"/>
+        <div class="stripe-note">🔒 Powered by <b>Stripe</b>（実装予定）</div>
+      </div>
+      <button class="btn-main" id="pay-btn" onclick="processPayment()">✓ 支払いを確定する</button>
+      <button class="btn-sub" onclick="showScreen('sc-confirm')">← 注文内容に戻る</button>
+    </div>
+  </div>
+
+  <!-- PROCESSING -->
+  <div class="proc" id="sc-proc">
+    <div class="spin"></div>
+    <div class="proc-txt">決済処理中…</div>
+  </div>
+
+  <!-- ④ TICKET -->
+  <div class="screen" id="sc-ticket">
+    <div class="ticket-wrap">
+      <div class="tick-icon">✅</div>
+      <div class="tick-title">ご注文ありがとうございます！</div>
+      <div class="tick-sub">お支払いが完了しました。<br>番号が呼ばれたらカウンターへどうぞ。</div>
+      <div class="tick-num-box">
+        <div class="tick-num-l">お客様番号</div>
+        <div class="tick-num-v" id="ticket-num">--</div>
+      </div>
+      <div class="tick-items" id="ticket-items"></div>
+      <div class="tick-note">
+        📢 番号は店頭モニターに表示されます<br>
+        <b id="ticket-num2">--</b> 番でお呼びします<br>
+        準備まで約 <b>5〜10分</b> お待ちください
+      </div>
+    </div>
+  </div>
+
+</div>
+<script>
+// ── SUPABASE INIT ──
+const { createClient } = supabase;
+const sb = createClient(SUPABASE_URL, SUPABASE_KEY);
+
+let STORE = null;
+let MENU  = [];
+let CART  = {}; // { menuItemId: qty }
+
+// ── INIT ──
+async function init(){
+  try {
+    // 店舗情報取得
+    const { data: stores, error: se } = await sb.from('stores').select('*').limit(1);
+    if(se || !stores.length) throw new Error('店舗情報の取得に失敗しました');
+    STORE = stores[0];
+    document.getElementById('store-name').textContent = '🍴 ' + STORE.name;
+    document.getElementById('store-catch').textContent = STORE.catch_phrase || '';
+
+    // メニュー取得
+    const { data: menu, error: me } = await sb
+      .from('menu_items')
+      .select('*')
+      .eq('store_id', STORE.id)
+      .order('sort_order');
+    if(me) throw new Error('メニューの取得に失敗しました');
+    MENU = menu || [];
+    renderMenu();
+  } catch(e) {
+    document.getElementById('menu-list').innerHTML =
+      `<div class="err-box">⚠️ ${e.message}<br><br>config.js の設定を確認してください。</div>`;
+  }
+}
+
+// ── MENU RENDER ──
+function renderMenu(){
+  const el = document.getElementById('menu-list');
+  el.innerHTML = '';
+  if(!MENU.length){
+    el.innerHTML = '<div style="text-align:center;padding:40px 20px;color:#bbb;font-size:13px">メニューがまだ登録されていません</div>';
+    return;
+  }
+  const cats = [...new Set(MENU.map(m => m.category))];
+  cats.forEach(cat => {
+    const items = MENU.filter(m => m.category === cat);
+    const label = document.createElement('div');
+    label.className = 'cat-label';
+    label.textContent = cat;
+    el.appendChild(label);
+
+    items.forEach(item => {
+      const div = document.createElement('div');
+      div.className = 'item-card' + (item.active ? '' : ' soldout');
+      div.innerHTML = `
+        <div class="item-icon">${item.icon || '🍴'}</div>
+        <div class="item-info">
+          <div class="item-name">${item.name}${!item.active ? '<span class="soldout-badge">SOLD OUT</span>' : ''}</div>
+          ${item.description ? `<div class="item-desc">${item.description}</div>` : ''}
+          <div class="item-price">¥${item.price.toLocaleString()}</div>
+        </div>
+        <div class="qty-ctrl">
+          <button class="qb minus" onclick="cQty('${item.id}',-1)">−</button>
+          <span class="qn" id="cq-${item.id}">${CART[item.id]||0}</span>
+          <button class="qb plus" onclick="cQty('${item.id}',1)">＋</button>
+        </div>`;
+      el.appendChild(div);
+    });
+  });
+  updateCartBar();
+}
+
+function cQty(id, d){
+  CART[id] = Math.max(0, (CART[id]||0) + d);
+  const el = document.getElementById('cq-' + id);
+  if(el) el.textContent = CART[id];
+  updateCartBar();
+}
+function cartTotal(){ return Object.entries(CART).reduce((s,[id,q])=>{ const m=MENU.find(x=>x.id===id); return s+(m?m.price*q:0); },0); }
+function cartQty(){ return Object.values(CART).reduce((a,b)=>a+b,0); }
+function updateCartBar(){
+  const qty = cartQty();
+  const bar = document.getElementById('cart-bar');
+  if(qty > 0){
+    bar.classList.remove('hidden');
+    document.getElementById('cart-count').textContent = qty;
+    document.getElementById('cart-total-bar').textContent = '¥' + cartTotal().toLocaleString();
+  } else {
+    bar.classList.add('hidden');
+  }
+}
+
+// ── CONFIRM ──
+function goConfirm(){
+  const el = document.getElementById('confirm-list');
+  el.innerHTML = '';
+  Object.entries(CART).forEach(([id, qty]) => {
+    if(!qty) return;
+    const m = MENU.find(x => x.id === id);
+    if(!m) return;
+    const div = document.createElement('div');
+    div.className = 'ci';
+    div.innerHTML = `
+      <div>
+        <div class="ci-l">${m.icon||''} ${m.name}</div>
+        <div class="ci-sub">×${qty}</div>
+      </div>
+      <div class="ci-r">¥${(m.price * qty).toLocaleString()}</div>`;
+    el.appendChild(div);
+  });
+  document.getElementById('confirm-total').textContent = '¥' + cartTotal().toLocaleString();
+  showScreen('sc-confirm');
+}
+
+// ── PAYMENT ──
+function goPayment(){
+  document.getElementById('pay-amount').textContent = '¥' + cartTotal().toLocaleString();
+  showScreen('sc-payment');
+}
+
+async function processPayment(){
+  const btn = document.getElementById('pay-btn');
+  btn.disabled = true;
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById('sc-proc').classList.add('active');
+
+  try {
+    // 次の番号を取得（最大値 + 1）
+    const { data: last } = await sb
+      .from('orders')
+      .select('ticket_number')
+      .eq('store_id', STORE.id)
+      .order('ticket_number', { ascending: false })
+      .limit(1);
+    const ticketNum = (last && last.length) ? last[0].ticket_number + 1 : 10;
+
+    // 注文を登録
+    const { data: order, error: oe } = await sb
+      .from('orders')
+      .insert({ store_id: STORE.id, ticket_number: ticketNum, total: cartTotal(), status: 'waiting' })
+      .select()
+      .single();
+    if(oe) throw oe;
+
+    // 明細を登録
+    const items = Object.entries(CART)
+      .filter(([,q]) => q > 0)
+      .map(([id, qty]) => {
+        const m = MENU.find(x => x.id === id);
+        return { order_id: order.id, item_name: m.name, item_icon: m.icon||'🍴', price: m.price, quantity: qty };
+      });
+    const { error: ie } = await sb.from('order_items').insert(items);
+    if(ie) throw ie;
+
+    // チケット表示
+    showTicket(ticketNum, items);
+    CART = {};
+    renderMenu();
+  } catch(e) {
+    alert('エラーが発生しました: ' + e.message);
+    btn.disabled = false;
+    showScreen('sc-payment');
+  }
+}
+
+function showTicket(num, items){
+  document.getElementById('ticket-num').textContent = num;
+  document.getElementById('ticket-num2').textContent = num + '番';
+  const el = document.getElementById('ticket-items');
+  el.innerHTML = '<div style="font-size:11px;color:#aaa;font-weight:700;margin-bottom:6px">ご注文内容</div>';
+  let total = 0;
+  items.forEach(it => {
+    const d = document.createElement('div'); d.className = 'tick-item';
+    d.innerHTML = `<span>${it.item_icon} ${it.item_name} ×${it.quantity}</span><span>¥${(it.price*it.quantity).toLocaleString()}</span>`;
+    el.appendChild(d);
+    total += it.price * it.quantity;
+  });
+  const tr = document.createElement('div'); tr.className = 'tick-item';
+  tr.style.cssText = 'font-weight:800;color:#222;border-top:1px solid #e8e8e8;margin-top:5px;padding-top:5px';
+  tr.innerHTML = `<span>合計</span><span>¥${total.toLocaleString()}</span>`;
+  el.appendChild(tr);
+  document.getElementById('sc-proc').classList.remove('active');
+  showScreen('sc-ticket');
+}
+
+function showScreen(id){
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById('sc-proc').classList.remove('active');
+  document.getElementById(id).classList.add('active');
+}
+
+init();
+</script>
+</body>
+</html>
